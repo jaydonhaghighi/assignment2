@@ -1,0 +1,4 @@
+CPU, 65
+FORK, 18
+EXEC program3, 15
+END_IO 7, 95
