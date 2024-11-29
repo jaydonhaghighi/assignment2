@@ -4,6 +4,12 @@
 #include <string>
 #include <vector>
 #include <random>
+#include <fstream>
+#include <sstream>
+#include <iomanip>
+#include <algorithm>
+#include <climits>
+#include <iostream>
 
 constexpr uint16_t ADDR_BASE = 0x00;
 constexpr uint16_t VECTOR_SIZE = 2;
@@ -14,6 +20,8 @@ namespace utils {
     std::string formatHex(uint16_t value);
 }
 
+enum ProcessState { NEW, READY, RUNNING, WAITING, TERMINATED };
+
 struct VectorEntry {
     uint16_t interrupt_num;
     uint16_t isr_address;
@@ -22,28 +30,26 @@ struct VectorEntry {
 struct Partition {
     unsigned int number;
     unsigned int size;
-    std::string code;
-    bool occupied;
+    int occupiedBy; // Use -1 to denote free
 };
 
 struct PCB {
     unsigned int pid;
     std::string programName;
-    unsigned int partitionNumber;
-    unsigned int size;
+    unsigned int arrivalTime;
+    unsigned int totalCPUTime;
     unsigned int remainingCPUTime;
-    bool isReady;
-    unsigned int parentPID;
-};
-
-struct ExternalFile {
-    std::string programName;
-    unsigned int size;
-};
-
-struct ProgramTrace {
-    std::string command;
-    int duration;
+    unsigned int ioFrequency;
+    unsigned int ioDuration;
+    unsigned int nextIOTime;
+    unsigned int partitionNumber; // Partition number where process is located
+    ProcessState state;
+    unsigned int size; // Memory size of the process
+    unsigned int priority; // For Priority scheduling
+    unsigned int lastScheduledTime; // For Round Robin
+    unsigned int totalWaitTime; // For metrics
+    unsigned int startTime; // Time when process started
+    unsigned int finishTime; // Time when process finished
 };
 
 class VectorTable {
@@ -63,10 +69,10 @@ private:
     VectorTable* vectorTable;
     std::vector<Partition> memoryPartitions;
     std::vector<PCB> pcbTable;
-    std::vector<ExternalFile> externalFiles;
     unsigned int nextPID;
-    int currentTime;
+    unsigned int currentTime;
     std::string executionLog;
+    std::string memoryStatusLog;
     std::mt19937 rng;
     std::uniform_int_distribution<> execTimeDistr;
 
@@ -74,24 +80,18 @@ private:
     int getRandomExecutionTime();
     bool isChildProcess(unsigned int pid);
     void initializeMemoryPartitions();
-    void initializePCB0();
     int findBestFitPartition(unsigned int size);
-    void loadExternalFiles(const std::string& filename);
-    std::vector<ProgramTrace> loadProgramTrace(const std::string& programName);
-    unsigned int getProgramSize(const std::string& programName);
     void logActivity(int duration, const std::string& activity);
+    void logStateTransition(unsigned int time, unsigned int pid, const std::string& oldState, const std::string& newState);
+    void saveMemoryStatus(unsigned int time);
 
 public:
     OSSimulator();
     void setVectorTable(VectorTable* vt);
-    void executeProgram(const std::string& programName);
-    void processTrace(const std::string& command, int duration);
-    void handleFork(unsigned int parentPID);
-    void handleExec(const std::string& programName);
-    void handleSyscall(int syscallNum, int duration);
-    void handleEndIO(int ioNum, int duration);
-    void saveSystemStatus();
+    void loadProcesses(const std::string& filename);
+    void simulate(const std::string& schedulerType);
     void saveExecution();
+    void saveMemoryStatus();
 };
 
 #endif
