@@ -1,8 +1,4 @@
-g++ -o interrupts interrupts.cpp
-./interrupts
-
-chmod +x test1.sh
-chmod +x test2.sh
-
-./test1.sh
-./test2.sh
+```
+# Run this to get Execution, Memory Status and Metrics
+sh test.sh
+```
