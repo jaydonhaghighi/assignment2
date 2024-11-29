@@ -30,7 +30,7 @@ struct VectorEntry {
 struct Partition {
     unsigned int number;
     unsigned int size;
-    int occupiedBy; // Use -1 to denote free
+    int occupiedBy;
 };
 
 struct PCB {
@@ -42,14 +42,14 @@ struct PCB {
     unsigned int ioFrequency;
     unsigned int ioDuration;
     unsigned int nextIOTime;
-    unsigned int partitionNumber; // Partition number where process is located
+    unsigned int partitionNumber;
     ProcessState state;
-    unsigned int size; // Memory size of the process
-    unsigned int priority; // For Priority scheduling
-    unsigned int lastScheduledTime; // For Round Robin
-    unsigned int totalWaitTime; // For metrics
-    unsigned int startTime; // Time when process started
-    unsigned int finishTime; // Time when process finished
+    unsigned int size;
+    unsigned int priority;
+    unsigned int lastScheduledTime;
+    unsigned int totalWaitTime;
+    unsigned int startTime;
+    unsigned int finishTime;
 };
 
 class VectorTable {
