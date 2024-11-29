@@ -1,5 +1,12 @@
 .vscode/settings.jsonZone.Identifier
-interrupts.cpp
 .DS_Store
 sim
 .vscode/settings.json
+execution_fcfs.txt
+execution_fcfs.txt
+.gitignore
+execution_rr.txt
+memory_status_fcfs.txt
+memory_status_priority.txt
+memory_status_rr.txt
+simulator

@@ -30,7 +30,7 @@ struct VectorEntry {
 struct Partition {
     unsigned int number;
     unsigned int size;
-    int occupiedBy;
+    int occupiedBy; // Use -1 to denote free
 };
 
 struct PCB {
@@ -40,16 +40,22 @@ struct PCB {
     unsigned int totalCPUTime;
     unsigned int remainingCPUTime;
     unsigned int ioFrequency;
+    unsigned int initialIOFrequency;    // Store initial I/O frequency
     unsigned int ioDuration;
+    unsigned int initialIODuration;     // Store initial I/O duration
     unsigned int nextIOTime;
-    unsigned int partitionNumber;
+    unsigned int partitionNumber; // Partition number where process is located
     ProcessState state;
-    unsigned int size;
-    unsigned int priority;
-    unsigned int lastScheduledTime;
-    unsigned int totalWaitTime;
-    unsigned int startTime;
-    unsigned int finishTime;
+    unsigned int size; // Memory size of the process
+    unsigned int priority; // For Priority scheduling
+    unsigned int lastScheduledTime; // For Round Robin
+    unsigned int totalWaitTime; // Total time spent in the READY queue
+    unsigned int startTime; // Time when process started
+    unsigned int finishTime; // Time when process finished
+    unsigned int responseTime; // Time from arrival to first execution
+    bool hasStarted; // Flag to check if process has started execution
+    unsigned int totalIOTime; // Total time spent in I/O
+    unsigned int numberOfIO; // Number of I/O operations performed
 };
 
 class VectorTable {
@@ -75,6 +81,7 @@ private:
     std::string memoryStatusLog;
     std::mt19937 rng;
     std::uniform_int_distribution<> execTimeDistr;
+    std::string schedulerType; // Added to store scheduler type
 
     void clearOutputFiles();
     int getRandomExecutionTime();
@@ -92,6 +99,7 @@ public:
     void simulate(const std::string& schedulerType);
     void saveExecution();
     void saveMemoryStatus();
+    void calculateMetrics();
 };
 
 #endif
