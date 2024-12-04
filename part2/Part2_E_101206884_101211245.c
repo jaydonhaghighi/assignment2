@@ -12,7 +12,7 @@
 #define NUM_STUDENTS 20
 #define MARKING_ROUNDS 3
 
-// Shared memory structure to store student database and TA progress
+// shared memory structure to store student database and TA progress
 typedef struct {
     int database[NUM_STUDENTS];
     int ta_progress[NUM_TAS];

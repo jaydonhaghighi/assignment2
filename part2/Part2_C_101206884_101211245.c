@@ -1,165 +1,150 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <sys/types.h>
+#include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/wait.h>
 #include <semaphore.h>
-#include <fcntl.h>
 #include <time.h>
+#include <string.h>
 
 #define NUM_TAS 5
 #define NUM_STUDENTS 20
-#define MARKING_ROUNDS 3
+#define NUM_CYCLES 3
+#define MAX_MARK 10
+#define SHM_NAME "/student_list_shm"
+#define SEM_BASE_NAME "/ta_semaphore_"
 
-// Shared memory structure to store the database and TA progress
+// Struct to store shared data
 typedef struct {
-    int database[NUM_STUDENTS];
-    int ta_progress[NUM_TAS];
-} SharedMemory;
+    int students[NUM_STUDENTS];
+    int current_index;
+} shared_data_t;
 
-sem_t *semaphores[NUM_TAS];
-sem_t *print_mutex;
-
-/**
- * Function executed by each TA process.
- * Implements the marking task while ensuring mutual exclusion
- * using semaphores for shared resource access.
- */
-void ta_task(int id, SharedMemory *shared_mem) {
-    int rounds_completed = 0;
-
-    while (rounds_completed < MARKING_ROUNDS) {
-        int next_student;
-        int acquired = 0;
-
-        // attempts to acquire necessary semaphores in a retry loop
-        while (!acquired) {
-            sem_wait(semaphores[id]);
-            if (sem_trywait(semaphores[(id + 1) % NUM_TAS]) == 0) {
-                acquired = 1;
-            } else {
-                sem_post(semaphores[id]);
-                sleep(1); // Avoid busy waiting
-            }
-        }
-
-        // accesses the database to fetch the next student
-        next_student = shared_mem->database[shared_mem->ta_progress[id]];
-        if (next_student == 9999) {
-            shared_mem->ta_progress[id] = 0;
-            next_student = shared_mem->database[shared_mem->ta_progress[id]];
-            rounds_completed++;
-        }
-        shared_mem->ta_progress[id]++;
-
-        sem_wait(print_mutex);
-        printf("TA %d accessing database\n", id + 1);
-        sem_post(print_mutex);
-
-        // delay for accessing the database
-        sleep(rand() % 4 + 1);
-
-        // eelease semaphores after access
-        sem_post(semaphores[id]);
-        sem_post(semaphores[(id + 1) % NUM_TAS]);
-
-        sem_wait(print_mutex);
-        printf("TA %d is marking student: %04d\n", id + 1, next_student);
-        sem_post(print_mutex);
-
-        // delay for marking
-        sleep(rand() % 10 + 1);
-
-        // random mark between 0 and 10
-        int mark = rand() % 11;
-        sem_wait(print_mutex);
-        printf("TA %d marked Student %04d: Mark %d\n", id + 1, next_student, mark);
-        sem_post(print_mutex);
-    }
-
-    sem_wait(print_mutex);
-    printf("TA %d has completed marking.\n", id + 1);
-    sem_post(print_mutex);
-
-    exit(0);
+// Function to simulate delay
+void random_delay(int min, int max) {
+    sleep(min + rand() % (max - min + 1));
 }
 
-/**
- * Main function to initialize shared memory, semaphores,
- * and processes for TAs, and handle cleanup after completion.
- */
+// Function to initialize the student list in shared memory
+void initialize_shared_memory(shared_data_t *data) {
+    for (int i = 0; i < NUM_STUDENTS; i++) {
+        data->students[i] = (i < NUM_STUDENTS - 1) ? i + 1 : 9999; // 9999 marks the end
+    }
+    data->current_index = 0;
+}
+
+// Function to create semaphore names
+void get_semaphore_name(int index, char *buffer, size_t size) {
+    snprintf(buffer, size, "%s%d", SEM_BASE_NAME, index);
+}
+
+// TA process
+void ta_process(int ta_id, sem_t **semaphores, shared_data_t *shared_data) {
+    char ta_file[10];
+    snprintf(ta_file, sizeof(ta_file), "TA%d.txt", ta_id);
+    FILE *log = fopen(ta_file, "w");
+    if (!log) {
+        perror("Error creating TA file");
+        exit(EXIT_FAILURE);
+    }
+
+    srand(time(NULL) + ta_id); // Unique seed for each TA
+    for (int cycle = 0; cycle < NUM_CYCLES; cycle++) {
+        while (1) {
+            int acquired = 0; // Track if semaphores are acquired
+            int student_id = -1;
+
+            // Attempt to acquire semaphore j and (j+1) % NUM_TAS
+            sem_wait(semaphores[ta_id - 1]); // Acquire semaphore j
+            acquired++;
+            if (sem_trywait(semaphores[ta_id % NUM_TAS]) == 0) { // Try to acquire (j+1) % NUM_TAS
+                acquired++;
+            } else {
+                // If unable to acquire (j+1), release j
+                sem_post(semaphores[ta_id - 1]);
+                acquired--;
+                continue;
+            }
+
+            // Access shared memory
+            student_id = shared_data->students[shared_data->current_index];
+            if (student_id == 9999) {
+                shared_data->current_index = 0; // Reset index for the next cycle
+                sem_post(semaphores[ta_id - 1]);
+                sem_post(semaphores[ta_id % NUM_TAS]);
+                break;
+            }
+            int local_index = shared_data->current_index++;
+            sem_post(semaphores[ta_id - 1]); // Release semaphore j
+            sem_post(semaphores[ta_id % NUM_TAS]); // Release (j+1)
+
+            // Simulate marking process
+            random_delay(1, 4); // Simulate delay accessing shared data
+            int mark = rand() % (MAX_MARK + 1);
+            fprintf(log, "Student: %04d, Mark: %d\n", student_id, mark);
+            fflush(log);
+            printf("TA%d: Marked Student %04d with %d\n", ta_id, student_id, mark);
+
+            random_delay(1, 10); // Simulate marking delay
+        }
+    }
+    fclose(log);
+    printf("TA%d: Finished marking\n", ta_id);
+}
+
 int main() {
-    srand(time(NULL));
-
-    // Create shared memory
-    SharedMemory *shared_mem = mmap(NULL, sizeof(SharedMemory), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    if (shared_mem == MAP_FAILED) {
-        perror("mmap");
+    // Shared memory setup
+    int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
+    if (shm_fd == -1) {
+        perror("Error creating shared memory");
         exit(EXIT_FAILURE);
     }
-
-    // initialize the database with student numbers
-    for (int i = 0; i < NUM_STUDENTS - 1; i++) {
-        shared_mem->database[i] = 1000 + i;
+    ftruncate(shm_fd, sizeof(shared_data_t));
+    shared_data_t *shared_data = mmap(NULL, sizeof(shared_data_t), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (shared_data == MAP_FAILED) {
+        perror("Error mapping shared memory");
+        exit(EXIT_FAILURE);
     }
-    shared_mem->database[NUM_STUDENTS - 1] = 9999;
+    initialize_shared_memory(shared_data);
 
-    // initialize TA progress
+    // Semaphore setup
+    sem_t *semaphores[NUM_TAS];
     for (int i = 0; i < NUM_TAS; i++) {
-        shared_mem->ta_progress[i] = 0;
-    }
-
-    // unlink existing semaphores
-    char sem_name[20];
-    for (int i = 0; i < NUM_TAS; i++) {
-        snprintf(sem_name, sizeof(sem_name), "/sem_ta_%d", i);
-        sem_unlink(sem_name);
-    }
-    sem_unlink("/sem_print");
-
-    // Create semaphores
-    for (int i = 0; i < NUM_TAS; i++) {
-        snprintf(sem_name, sizeof(sem_name), "/sem_ta_%d", i);
-        semaphores[i] = sem_open(sem_name, O_CREAT | O_EXCL, 0600, 1);
+        char sem_name[32];
+        get_semaphore_name(i, sem_name, sizeof(sem_name));
+        semaphores[i] = sem_open(sem_name, O_CREAT | O_EXCL, 0644, 1);
         if (semaphores[i] == SEM_FAILED) {
-            perror("sem_open");
+            perror("Error creating semaphore");
             exit(EXIT_FAILURE);
         }
     }
 
-    print_mutex = sem_open("/sem_print", O_CREAT | O_EXCL, 0600, 1);
-    if (print_mutex == SEM_FAILED) {
-        perror("sem_open");
-        exit(EXIT_FAILURE);
-    }
-
-    // fork processes for each TA
+    // Create TA processes
+    pid_t pids[NUM_TAS];
     for (int i = 0; i < NUM_TAS; i++) {
-        pid_t pid = fork();
-        if (pid == 0) {
-            ta_task(i, shared_mem);
-        } else if (pid < 0) {
-            perror("fork");
-            exit(EXIT_FAILURE);
+        pids[i] = fork();
+        if (pids[i] == 0) {
+            ta_process(i + 1, semaphores, shared_data);
+            exit(EXIT_SUCCESS);
         }
     }
 
-    // wait for all child processes to complete
+    // Wait for all processes to finish
     for (int i = 0; i < NUM_TAS; i++) {
-        wait(NULL);
+        waitpid(pids[i], NULL, 0);
     }
 
-    // cleanup
+    // Cleanup
     for (int i = 0; i < NUM_TAS; i++) {
-        snprintf(sem_name, sizeof(sem_name), "/sem_ta_%d", i);
         sem_close(semaphores[i]);
+        char sem_name[32];
+        get_semaphore_name(i, sem_name, sizeof(sem_name));
         sem_unlink(sem_name);
     }
+    munmap(shared_data, sizeof(shared_data_t));
+    shm_unlink(SHM_NAME);
 
-    sem_close(print_mutex);
-    sem_unlink("/sem_print");
-    munmap(shared_mem, sizeof(SharedMemory));
-    printf("All TAs have finished marking.\n");
+    printf("All TAs finished marking. Program complete.\n");
     return 0;
 }
