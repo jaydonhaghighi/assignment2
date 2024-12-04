@@ -81,7 +81,7 @@ private:
     std::string memoryStatusLog;
     std::mt19937 rng;
     std::uniform_int_distribution<> execTimeDistr;
-    std::string schedulerType; // Added to store scheduler type
+    std::string schedulerType;
 
     void clearOutputFiles();
     int getRandomExecutionTime();

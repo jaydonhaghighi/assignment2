@@ -1,0 +1,17 @@
+Report Part D:
+During multiple runs, no deadlock or livelock was observed. 
+The processes executed smoothly, with each TA accessing the database and marking students in a fair 
+and alternating manner. Deadlock was avoided because semaphores were released if both could not be acquired, 
+allowing other processes to proceed. Livelock was also avoided due to the retry mechanism with delays, 
+which prevented processes from endlessly contending for the same resources. The execution order was generally 
+round-robin, with TAs taking turns marking students. However, due to the random delays introduced during 
+database access and marking, the order of execution varied slightly between runs, but all TAs completed marking 
+the student list three times as expected.
+
+Report Part E:
+The updated program ensures both deadlock-free and livelock-free execution. Deadlock is avoided by acquiring 
+semaphores in a consistent global order, which prevents circular wait conditions. Livelock is avoided as 
+processes make progress without indefinite retries or contention. During execution, the processes access the 
+database and mark students in an alternating, fair manner. The random delays introduced variability in the 
+order of execution, but all TAs completed marking the student list three times without blocking or contention. 
+This approach ensures safe and efficient coordination among the processes.

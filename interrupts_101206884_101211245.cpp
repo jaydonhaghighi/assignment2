@@ -1,4 +1,4 @@
-#include "interrupts.hpp"
+#include "interrupts_101206884_101211245.hpp"
 
 namespace utils {
     std::string trim(const std::string& str) {
@@ -70,14 +70,13 @@ OSSimulator::OSSimulator()
     : nextPID(1), currentTime(0),
       rng(std::random_device()()),
       execTimeDistr(1, 10),
-      schedulerType("FCFS") // Default scheduler
+      schedulerType("FCFS") // FCFS by default
 {
     clearOutputFiles();
     initializeMemoryPartitions();
 }
 
 void OSSimulator::clearOutputFiles() {
-    std::ofstream("system_status.txt", std::ios::trunc).close();
     std::ofstream("execution.txt", std::ios::trunc).close();
     std::ofstream("memory_status.txt", std::ios::trunc).close();
 }
@@ -130,9 +129,9 @@ void OSSimulator::loadProcesses(const std::string& filename) {
         pcb.totalCPUTime = std::stoi(utils::trim(parts[3]));
         pcb.remainingCPUTime = pcb.totalCPUTime;
         pcb.ioFrequency = std::stoi(utils::trim(parts[4]));
-        pcb.initialIOFrequency = pcb.ioFrequency; // Store initial I/O frequency
+        pcb.initialIOFrequency = pcb.ioFrequency;
         pcb.ioDuration = std::stoi(utils::trim(parts[5]));
-        pcb.initialIODuration = pcb.ioDuration; // Store initial I/O duration
+        pcb.initialIODuration = pcb.ioDuration;
         pcb.nextIOTime = pcb.ioFrequency;
         pcb.state = NEW;
         pcb.partitionNumber = 0;
@@ -157,20 +156,20 @@ void OSSimulator::loadProcesses(const std::string& filename) {
 }
 
 void OSSimulator::simulate(const std::string& schedulerType) {
-    this->schedulerType = schedulerType; // Store the scheduler type
+    this->schedulerType = schedulerType;
 
     std::vector<PCB*> readyQueue;
     std::vector<PCB*> waitingQueue;
     PCB* runningProcess = nullptr;
 
-    unsigned int timeQuantum = 100; // For Round Robin
+    unsigned int timeQuantum = 100; // 100ms for Round Robin
     unsigned int timeSliceRemaining = 0;
 
     std::vector<PCB*> memoryWaitQueue;
 
-    executionLog += "+--------------------+-----+------------+-----------+\n";
-    executionLog += "| Time of Transition | PID |  Old State | New State |\n";
-    executionLog += "+--------------------+-----+------------+-----------+\n";
+    executionLog += "+--------------------+-----+-------------+------------+\n";
+    executionLog += "| Time of Transition | PID |  Old State  | New State  |\n";
+    executionLog += "+--------------------+-----+-------------+------------+\n";
 
     while (true) {
         bool allTerminated = true;
@@ -182,7 +181,7 @@ void OSSimulator::simulate(const std::string& schedulerType) {
         }
         if (allTerminated) break;
 
-        // Process arrivals
+        // process arrivals
         for (auto& pcb : pcbTable) {
             if (pcb.arrivalTime == currentTime && pcb.state == NEW) {
                 int partitionIndex = findBestFitPartition(pcb.size);
@@ -200,7 +199,7 @@ void OSSimulator::simulate(const std::string& schedulerType) {
             }
         }
 
-        // Allocate memory to waiting processes
+        // allocate memory to waiting processes
         for (auto it = memoryWaitQueue.begin(); it != memoryWaitQueue.end();) {
             PCB* pcb = *it;
             int partitionIndex = findBestFitPartition(pcb->size);
@@ -218,7 +217,7 @@ void OSSimulator::simulate(const std::string& schedulerType) {
             }
         }
 
-        // Update waiting processes
+        // update waiting processes
         for (auto it = waitingQueue.begin(); it != waitingQueue.end();) {
             PCB* pcb = *it;
             pcb->ioDuration--;
@@ -226,8 +225,8 @@ void OSSimulator::simulate(const std::string& schedulerType) {
 
             if (pcb->ioDuration <= 0) {
                 pcb->state = READY;
-                pcb->ioDuration = pcb->initialIODuration; // Reset I/O duration from initial value
-                pcb->nextIOTime = pcb->initialIOFrequency; // Reset next I/O time
+                pcb->ioDuration = pcb->initialIODuration;
+                pcb->nextIOTime = pcb->initialIOFrequency;
                 logStateTransition(currentTime, pcb->pid, "WAITING", "READY");
                 readyQueue.push_back(pcb);
                 it = waitingQueue.erase(it);
@@ -236,7 +235,7 @@ void OSSimulator::simulate(const std::string& schedulerType) {
             }
         }
 
-        // Check for time slice expiration (RR)
+        // check for time slice expiration (RR)
         if (schedulerType == "RR") {
             if (runningProcess != nullptr) {
                 timeSliceRemaining--;
@@ -249,13 +248,13 @@ void OSSimulator::simulate(const std::string& schedulerType) {
             }
         }
 
-        // Schedule next process
+        // schedule next process
         if (runningProcess == nullptr && !readyQueue.empty()) {
             PCB* nextProcess = nullptr;
             if (schedulerType == "FCFS") {
                 nextProcess = readyQueue.front();
                 readyQueue.erase(readyQueue.begin());
-            } else if (schedulerType == "Priority") {
+            } else if (schedulerType == "EP") {
                 auto it = std::min_element(readyQueue.begin(), readyQueue.end(), [](PCB* a, PCB* b) {
                     return a->priority < b->priority;
                 });
@@ -270,7 +269,7 @@ void OSSimulator::simulate(const std::string& schedulerType) {
                 runningProcess = nextProcess;
                 runningProcess->state = RUNNING;
 
-                // Set response time if not already set
+                // set response time
                 if (!runningProcess->hasStarted) {
                     runningProcess->responseTime = currentTime - runningProcess->arrivalTime;
                     runningProcess->hasStarted = true;
@@ -324,8 +323,8 @@ void OSSimulator::logStateTransition(unsigned int time, unsigned int pid, const 
 
     ss << "| " << std::setw(18) << std::left << time << " | "
        << std::setw(3) << std::left << pid << " | "
-       << std::setw(10) << std::left << oldState << " | "
-       << std::setw(9) << std::left << newState << " |\n";
+       << std::setw(11) << std::left << oldState << " | "
+       << std::setw(10) << std::left << newState << " |\n";
     executionLog += ss.str();
 }
 
@@ -369,7 +368,7 @@ void OSSimulator::saveMemoryStatus(unsigned int time) {
 }
 
 void OSSimulator::saveExecution() {
-    executionLog += "+--------------------+-----+------------+-----------+\n";
+    executionLog += "+--------------------+-----+-------------+------------+\n";
     std::ofstream file("execution.txt");
     file << executionLog;
 }
