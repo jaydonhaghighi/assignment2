@@ -1,8 +1,6 @@
 #include "interrupts_101206884_101211245.hpp"
 
-// utility namespace containing helper functions
 namespace utils {
-    // trims whitespace from both ends of a string
     std::string trim(const std::string& str) {
         size_t first = str.find_first_not_of(" \t\n\r");
         if (std::string::npos == first) {
@@ -12,7 +10,6 @@ namespace utils {
         return str.substr(first, (last - first + 1));
     }
 
-    // splits a string based on a delimiter
     std::vector<std::string> split_delim(const std::string& str, const std::string& delim) {
         std::vector<std::string> tokens;
         size_t prev = 0, pos = 0;
@@ -26,7 +23,6 @@ namespace utils {
         return tokens;
     }
 
-    // formats a uint16_t value as a hexadecimal string
     std::string formatHex(uint16_t value) {
         std::stringstream ss;
         ss << "0x" << std::setfill('0') << std::setw(4) << std::hex << std::uppercase << value;
@@ -34,12 +30,10 @@ namespace utils {
     }
 }
 
-// constructor for vector table, loads from a file
 VectorTable::VectorTable(const std::string& filename) {
     loadFromFile(filename);
 }
 
-// loads vector table addresses from a file
 bool VectorTable::loadFromFile(const std::string& filename) {
     std::ifstream file(filename);
     std::string line;
@@ -60,23 +54,18 @@ bool VectorTable::loadFromFile(const std::string& filename) {
     return true;
 }
 
-// retrieves the ISR address for a given interrupt number
 uint16_t VectorTable::getISRAddress(uint16_t interrupt_num) const {
     return addresses[interrupt_num];
 }
 
-// gets the memory position in hexadecimal for a given interrupt number
 std::string VectorTable::getMemoryPositionHex(uint16_t interrupt_num) const {
     return utils::formatHex(ADDR_BASE + (interrupt_num * VECTOR_SIZE));
 }
 
-// gets the memory position as a uint16_t for a given interrupt number
 uint16_t VectorTable::getMemoryPosition(uint16_t interrupt_num) const {
     return ADDR_BASE + (interrupt_num * VECTOR_SIZE);
 }
 
-
-// constructor for OS simulator, initializes variables and memory partitions
 OSSimulator::OSSimulator()
     : nextPID(1), currentTime(0),
       rng(std::random_device()()),
@@ -87,23 +76,19 @@ OSSimulator::OSSimulator()
     initializeMemoryPartitions();
 }
 
-// clears the output files by truncating them
 void OSSimulator::clearOutputFiles() {
     std::ofstream("execution.txt", std::ios::trunc).close();
     std::ofstream("memory_status.txt", std::ios::trunc).close();
 }
 
-// generates a random execution time between 1 and 10
 int OSSimulator::getRandomExecutionTime() {
     return execTimeDistr(rng);
 }
 
-// checks if a process is a child process based on its pid
 bool OSSimulator::isChildProcess(unsigned int pid) {
     return pid != 1;
 }
 
-// initializes memory partitions with predefined sizes
 void OSSimulator::initializeMemoryPartitions() {
     std::vector<unsigned int> sizes = {40, 25, 15, 10, 8, 2};
     for(unsigned int i = 0; i < sizes.size(); i++) {
@@ -111,7 +96,6 @@ void OSSimulator::initializeMemoryPartitions() {
     }
 }
 
-// finds the best fit partition for a given process size
 int OSSimulator::findBestFitPartition(unsigned int size) {
     int bestFit = -1;
     unsigned int minDiff = UINT_MAX;
@@ -128,7 +112,6 @@ int OSSimulator::findBestFitPartition(unsigned int size) {
     return bestFit;
 }
 
-// loads processes from an input file and initializes PCB table
 void OSSimulator::loadProcesses(const std::string& filename) {
     std::ifstream file(filename);
     std::string line;
@@ -172,26 +155,20 @@ void OSSimulator::loadProcesses(const std::string& filename) {
     }
 }
 
-// runs the simulation based on the specified scheduler type
 void OSSimulator::simulate(const std::string& schedulerType) {
     this->schedulerType = schedulerType;
-
     std::vector<PCB*> readyQueue;
     std::vector<PCB*> waitingQueue;
-    PCB* runningProcess = nullptr;
-
-    unsigned int timeQuantum = 100;
-    unsigned int timeSliceRemaining = 0;
-
     std::vector<PCB*> memoryWaitQueue;
+    PCB* runningProcess = nullptr;
+    const unsigned int timeQuantum = 100;
+    unsigned int currentTimeSlice = 0;
 
-    // initialize execution log header
     executionLog += "+--------------------+-----+-------------+------------+\n";
     executionLog += "| Time of Transition | PID |  Old State  | New State  |\n";
     executionLog += "+--------------------+-----+-------------+------------+\n";
 
     while (true) {
-        // check if all processes are terminated
         bool allTerminated = true;
         for (auto& pcb : pcbTable) {
             if (pcb.state != TERMINATED) {
@@ -201,7 +178,6 @@ void OSSimulator::simulate(const std::string& schedulerType) {
         }
         if (allTerminated) break;
 
-        // handle process arrivals
         for (auto& pcb : pcbTable) {
             if (pcb.arrivalTime == currentTime && pcb.state == NEW) {
                 int partitionIndex = findBestFitPartition(pcb.size);
@@ -219,7 +195,6 @@ void OSSimulator::simulate(const std::string& schedulerType) {
             }
         }
 
-        // allocate memory to waiting processes
         for (auto it = memoryWaitQueue.begin(); it != memoryWaitQueue.end();) {
             PCB* pcb = *it;
             int partitionIndex = findBestFitPartition(pcb->size);
@@ -237,7 +212,6 @@ void OSSimulator::simulate(const std::string& schedulerType) {
             }
         }
 
-        // update waiting processes for I/O completion
         for (auto it = waitingQueue.begin(); it != waitingQueue.end();) {
             PCB* pcb = *it;
             pcb->ioDuration--;
@@ -255,60 +229,57 @@ void OSSimulator::simulate(const std::string& schedulerType) {
             }
         }
 
-        // handle time slice expiration for round robin scheduler
-        if (schedulerType == "RR") {
-            if (runningProcess != nullptr) {
-                timeSliceRemaining--;
-                if (timeSliceRemaining <= 0) {
-                    runningProcess->state = READY;
-                    logStateTransition(currentTime, runningProcess->pid, "RUNNING", "READY");
-                    readyQueue.push_back(runningProcess);
-                    runningProcess = nullptr;
-                }
+        if (schedulerType == "RR" && runningProcess != nullptr) {
+            if (currentTimeSlice >= timeQuantum) {
+                runningProcess->state = READY;
+                logStateTransition(currentTime, runningProcess->pid, "RUNNING", "READY");
+                readyQueue.push_back(runningProcess);
+                runningProcess = nullptr;
+                currentTimeSlice = 0;
             }
         }
 
-        // schedule the next process if no process is currently running
         if (runningProcess == nullptr && !readyQueue.empty()) {
             PCB* nextProcess = nullptr;
+
             if (schedulerType == "FCFS") {
                 nextProcess = readyQueue.front();
                 readyQueue.erase(readyQueue.begin());
-            } else if (schedulerType == "EP") {
-                auto it = std::min_element(readyQueue.begin(), readyQueue.end(), [](PCB* a, PCB* b) {
-                    return a->priority < b->priority;
-                });
-                nextProcess = *it;
-                readyQueue.erase(it);
-            } else if (schedulerType == "RR") {
+            } 
+            else if (schedulerType == "EP") {
+                auto highestPriority = std::min_element(readyQueue.begin(), readyQueue.end(),
+                    [](PCB* a, PCB* b) { return a->priority < b->priority; });
+                nextProcess = *highestPriority;
+                readyQueue.erase(highestPriority);
+            }
+            else if (schedulerType == "RR") {
                 nextProcess = readyQueue.front();
                 readyQueue.erase(readyQueue.begin());
-                timeSliceRemaining = timeQuantum;
+                currentTimeSlice = 0;
             }
+
             if (nextProcess != nullptr) {
                 runningProcess = nextProcess;
                 runningProcess->state = RUNNING;
-
-                // set response time if process is starting for the first time
                 if (!runningProcess->hasStarted) {
                     runningProcess->responseTime = currentTime - runningProcess->arrivalTime;
                     runningProcess->hasStarted = true;
                 }
-
                 runningProcess->lastScheduledTime = currentTime;
                 logStateTransition(currentTime, runningProcess->pid, "READY", "RUNNING");
             }
         }
 
-        // simulate the running process
         if (runningProcess != nullptr) {
             runningProcess->remainingCPUTime--;
             runningProcess->nextIOTime--;
+            if (schedulerType == "RR") {
+                currentTimeSlice++;
+            }
+
             if (runningProcess->remainingCPUTime <= 0) {
                 runningProcess->state = TERMINATED;
                 runningProcess->finishTime = currentTime;
-
-                // release memory occupied by the process
                 for (auto& partition : memoryPartitions) {
                     if (partition.occupiedBy == runningProcess->pid) {
                         partition.occupiedBy = -1;
@@ -318,6 +289,7 @@ void OSSimulator::simulate(const std::string& schedulerType) {
                 saveMemoryStatus(currentTime);
                 logStateTransition(currentTime, runningProcess->pid, "RUNNING", "TERMINATED");
                 runningProcess = nullptr;
+                currentTimeSlice = 0;
             } else if (runningProcess->nextIOTime <= 0) {
                 runningProcess->state = WAITING;
                 runningProcess->nextIOTime = runningProcess->initialIOFrequency;
@@ -326,10 +298,10 @@ void OSSimulator::simulate(const std::string& schedulerType) {
                 logStateTransition(currentTime, runningProcess->pid, "RUNNING", "WAITING");
                 waitingQueue.push_back(runningProcess);
                 runningProcess = nullptr;
+                currentTimeSlice = 0;
             }
         }
 
-        // update wait times for all processes in the ready queue
         for (auto& pcb : readyQueue) {
             pcb->totalWaitTime++;
         }
@@ -338,10 +310,8 @@ void OSSimulator::simulate(const std::string& schedulerType) {
     }
 }
 
-// logs the state transition of a process
 void OSSimulator::logStateTransition(unsigned int time, unsigned int pid, const std::string& oldState, const std::string& newState) {
     std::stringstream ss;
-
     ss << "| " << std::setw(18) << std::left << time << " | "
        << std::setw(3) << std::left << pid << " | "
        << std::setw(11) << std::left << oldState << " | "
@@ -349,7 +319,6 @@ void OSSimulator::logStateTransition(unsigned int time, unsigned int pid, const 
     executionLog += ss.str();
 }
 
-// saves the current memory status to the memory status log
 void OSSimulator::saveMemoryStatus(unsigned int time) {
     std::stringstream ss;
     unsigned int memoryUsed = 0;
@@ -388,21 +357,18 @@ void OSSimulator::saveMemoryStatus(unsigned int time) {
     memoryStatusLog += ss.str();
 }
 
-// saves the execution log to a file
 void OSSimulator::saveExecution() {
     executionLog += "+--------------------+-----+-------------+------------+\n";
     std::ofstream file("execution.txt");
     file << executionLog;
 }
 
-// saves the memory status log to a file
 void OSSimulator::saveMemoryStatus() {
     memoryStatusLog += "+------------+------------+---------------------------+-------------------+-------------------+\n";
     std::ofstream file("memory_status.txt");
     file << memoryStatusLog;
 }
 
-// calculates and displays simulation metrics
 void OSSimulator::calculateMetrics() {
     unsigned int totalTurnaroundTime = 0;
     unsigned int totalWaitTime = 0;
@@ -428,7 +394,6 @@ void OSSimulator::calculateMetrics() {
     double throughput = currentTime ? static_cast<double>(processesCompleted) / currentTime : 0;
     double averageIOTime = processesCompleted ? static_cast<double>(totalIOTime) / processesCompleted : 0;
 
-    // output the metrics
     std::cout << "\nSimulation Metrics:\n";
     std::cout << "Scheduler Type: " << schedulerType << "\n";
     std::cout << "Total Simulation Time: " << currentTime << " ms\n";
@@ -440,7 +405,6 @@ void OSSimulator::calculateMetrics() {
     std::cout << "Average I/O Time: " << averageIOTime << " ms\n";
 }
 
-// main function to run the OS simulator
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::cerr << "Usage: " << argv[0] << " <input_data.txt> [scheduler]\n";
